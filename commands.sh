@@ -19,3 +19,5 @@ python -m build
 pip install -e . -q
 
 datahub ingest -c recipe.dhub.yaml
+
+mlflow ui
