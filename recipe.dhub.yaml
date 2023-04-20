@@ -1,0 +1,6 @@
+source:
+  type: source.mlflow.MLflowSource
+  config:
+    env: "DEV"
+sink:
+  type: "console"
