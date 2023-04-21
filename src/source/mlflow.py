@@ -1,14 +1,20 @@
 from typing import Iterable, Optional, List
 
+import datahub.emitter.mce_builder as builder
 from datahub.configuration.common import ConfigModel
+from datahub.emitter.mcp import MetadataChangeProposalWrapper
 from datahub.ingestion.api.common import PipelineContext, WorkUnit
 from datahub.ingestion.api.source import Source, SourceReport
-from mlflow import MlflowClient
-from pydantic.fields import Field
 from datahub.ingestion.api.workunit import MetadataWorkUnit
-from datahub.emitter.mcp import MetadataChangeProposalWrapper
-from datahub.metadata.schema_classes import MLModelPropertiesClass
-import datahub.emitter.mce_builder as builder
+from datahub.metadata.schema_classes import (
+    _Aspect,
+    MLModelGroupPropertiesClass,
+    MLModelPropertiesClass,
+    VersionTagClass,
+)
+from mlflow import MlflowClient
+from mlflow.entities.model_registry import RegisteredModel, ModelVersion
+from pydantic.fields import Field
 
 
 class MLflowConfig(ConfigModel):
@@ -56,57 +62,92 @@ class MLflowSource(Source):
         return self.report
 
     def get_workunits(self) -> Iterable[WorkUnit]:
-        model_versions = self._get_mlflow_data()
-        for model_version in model_versions:
-            ml_model_urn = builder.make_ml_model_urn(
-                platform=self.platform,
-                model_name=model_version.name,
-                env=self.stage_map[model_version.current_stage],
-            )
-            # customProperties: Optional[Dict[str, str]] = None,
-            # externalUrl: Union[None, str] = None,
-            # description: Union[None, str] = None,
-            # date: Union[None, int] = None,
-            # version: Union[None, "VersionTagClass"] = None,
-            # type: Union[None, str] = None,
-            # hyperParams: Union[None, List["MLHyperParamClass"]] = None,
-            # trainingMetrics: Union[None, List["MLMetricClass"]] = None,
-            # mlFeatures: Union[None, List[str]] = None,
-            # tags: Optional[List[str]] = None,
-            # deployments: Union[None, List[str]] = None,
-            # groups: Union[None, List[str]] = None,
-            ml_model_properties = MLModelPropertiesClass(
-                # todo: do smth?
-                customProperties=model_version.tags,
-                description=model_version.description,
-                date=model_version.creation_timestamp,
-                # todo: do smth?
-                # mlflow tags are dicts, but datahub tags are lists. currently use only keys from mlflow tags
-                tags=list(model_version.tags),
-            )
-            mcp = MetadataChangeProposalWrapper(
-                entityUrn=ml_model_urn,
-                aspect=ml_model_properties,
-            )
-            wu = MetadataWorkUnit(
-                # don't understand a purpose of this id
-                id=f"{model_version.name}_{model_version.current_stage}",
-                mcp=mcp,
-            )
-            self.report.report_workunit(wu)
-            yield wu
-
-    def _get_mlflow_data(self):
-        # todo: implement pagination
-        for registered_model in self.client.search_registered_models():
-            print(f"Processing model: {registered_model.name}")
-            model_versions = self.client.get_latest_versions(
-                name=registered_model.name,
-                stages=self.config.stages_to_use,
-            )
+        registered_models = self._get_mlflow_registered_models()
+        for registered_model in registered_models:
+            yield self._get_ml_group_workunit(registered_model)
+            model_versions = self._get_mlflow_model_versions(registered_model)
             for model_version in model_versions:
-                print(model_version.current_stage)
-                yield model_version
+                yield self._get_ml_model_workunit(
+                    model_group_name=registered_model.name,
+                    model_version=model_version,
+                )
+
+    def _get_mlflow_registered_models(self) -> List[RegisteredModel]:
+        # todo: implement pagination
+        # todo: where all RegisteredModel properties like aliases come from?
+        registered_models = self.client.search_registered_models()
+        return registered_models
+
+    def _get_mlflow_model_versions(self, registered_model: RegisteredModel) -> List[ModelVersion]:
+        # todo: implement pagination
+        filter_string = f"name = '{registered_model.name}'"
+        model_versions = self.client.search_model_versions(filter_string)
+        return model_versions
+
+    def _create_workunit(self, urn: str, aspect: _Aspect) -> MetadataWorkUnit:
+        mcp = MetadataChangeProposalWrapper(
+            entityUrn=urn,
+            aspect=aspect,
+        )
+        wu = MetadataWorkUnit(
+            id=urn,
+            mcp=mcp,
+        )
+        self.report.report_workunit(wu)
+        return wu
+
+    # todo: replace List with Iterable?
+    def _get_ml_group_workunit(self, registered_model: RegisteredModel) -> WorkUnit:
+        ml_model_group_urn = builder.make_ml_model_group_urn(
+            platform=self.platform,
+            group_name=registered_model.name,
+            # todo: replace
+            env="PROD",
+        )
+        # todo: add other options?
+        # version
+        ml_model_group_properties = MLModelGroupPropertiesClass(
+            customProperties=registered_model.tags,
+            description=registered_model.description,
+            createdAt=registered_model.creation_timestamp,
+        )
+        wu = self._create_workunit(
+            urn=ml_model_group_urn,
+            aspect=ml_model_group_properties,
+        )
+        return wu
+
+    def _get_ml_model_workunit(self, model_group_name: str, model_version: ModelVersion) -> WorkUnit:
+        ml_model_group_urn = builder.make_ml_model_group_urn(
+            platform=self.platform,
+            group_name=model_group_name,
+            # todo: replace
+            env="PROD",
+        )
+        ml_model_urn = builder.make_ml_model_urn(
+            platform=self.platform,
+            model_name=f"{model_version.name}_{model_version.version}",
+            # todo: replace
+            env="PROD",
+        )
+        # externalUrl: Union[None, str] = None,
+        # type: Union[None, str] = None,
+        # hyperParams: Union[None, List["MLHyperParamClass"]] = None,
+        # trainingMetrics: Union[None, List["MLMetricClass"]] = None,
+        ml_model_properties = MLModelPropertiesClass(
+            customProperties=model_version.tags,
+            description=model_version.description,
+            date=model_version.creation_timestamp,
+            version=VersionTagClass(versionTag=str(model_version.version)),
+            # mlflow tags are dicts, but datahub tags are lists. currently use only keys from mlflow tags
+            tags=list(model_version.tags),
+            groups=[ml_model_group_urn],
+        )
+        wu = self._create_workunit(
+            urn=ml_model_urn,
+            aspect=ml_model_properties,
+        )
+        return wu
 
     @classmethod
     def create(cls, config_dict: dict, ctx: PipelineContext) -> Source:

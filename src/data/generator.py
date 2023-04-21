@@ -20,6 +20,7 @@ if __name__ == '__main__':
     client.create_model_version(
         name=model_name,
         source="mlruns/0/d16076a3ec534311817565e6527539c0/artifacts/sklearn-model",
+        tags=dict(model_version_id=1),
     )
     client.transition_model_version_stage(
         name=model_name,
@@ -30,6 +31,7 @@ if __name__ == '__main__':
     client.create_model_version(
         name=model_name,
         source="mlruns/0/d16076a3ec534311817565e6527539c0/artifacts/sklearn-model",
+        tags=dict(model_version_id=2),
     )
     client.transition_model_version_stage(
         name=model_name,

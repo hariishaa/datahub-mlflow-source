@@ -15,7 +15,7 @@ click-default-group==1.2.2
 click-spinner==0.1.10
 cloudpickle==2.2.1
 contourpy==1.0.7
--e git+https://github.com/hariishaa/datahub-mlflow-source.git@f8935fdd653275945bdac1696bfa0083e7ba8455#egg=custom_source_examples
+-e git+https://github.com/hariishaa/datahub-mlflow-source.git@07153c872bda676ade977c1d7b85d7cba12eaade#egg=custom_source_examples
 cycler==0.11.0
 databricks-cli==0.17.6
 Deprecated==1.2.13
