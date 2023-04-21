@@ -2,7 +2,6 @@ source:
   type: source.mlflow.MLflowSource
   config:
     tracking_uri: "/Users/grigory/Prog/opensource/datahub-mlflow-source/mlruns"
-    env: "DEV"
 sink:
 #  type: "console"
   type: file
