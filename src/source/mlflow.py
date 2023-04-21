@@ -1,4 +1,4 @@
-from typing import Iterable, Optional
+from typing import Iterable, Optional, List
 
 from datahub.configuration.common import ConfigModel
 from datahub.ingestion.api.common import PipelineContext, WorkUnit
@@ -22,6 +22,14 @@ class MLflowConfig(ConfigModel):
         # https://mlflow.org/docs/latest/python_api/mlflow.html?highlight=registry_uri#mlflow.set_registry_uri
         description="Registry server URI"
     )
+    # todo: refactor this
+    stages_to_use: Optional[List[str]] = Field(
+        default=[
+            "Staging",
+            "Production",
+        ],
+        description="Stages to use"
+    )
 
 
 class MLflowSource(Source):
@@ -33,10 +41,6 @@ class MLflowSource(Source):
         'Staging': 'STG',
         'Production': 'PROD',
     }
-    stages_to_use = [
-        "Staging",
-        "Production",
-    ]
 
     def __init__(self, ctx: PipelineContext, config: MLflowConfig):
         super().__init__(ctx)
@@ -98,7 +102,7 @@ class MLflowSource(Source):
             print(f"Processing model: {registered_model.name}")
             model_versions = self.client.get_latest_versions(
                 name=registered_model.name,
-                stages=self.stages_to_use,
+                stages=self.config.stages_to_use,
             )
             for model_version in model_versions:
                 print(model_version.current_stage)
