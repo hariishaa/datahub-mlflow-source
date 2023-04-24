@@ -28,25 +28,24 @@ class MLflowConfig(ConfigModel):
         # https://mlflow.org/docs/latest/python_api/mlflow.html?highlight=registry_uri#mlflow.set_registry_uri
         description="Registry server URI"
     )
-    # todo: refactor this
-    stages_to_use: Optional[List[str]] = Field(
-        default=[
-            "Staging",
-            "Production",
-        ],
-        description="Stages to use"
+    env: str = Field(
+        default=builder.DEFAULT_ENV,
+        description="Environment to use in namespace when constructing URNs.",
     )
 
 
+# todo:
+# Сгенерировать тестовые раны
+# Добавить инфу о метриках и гиперпараметрах из ранов
+# Добавить 4 тега под статусы моделей
+# Привязать теги статусов к моделям
+# Как-то реализовать ссылку на гуи для моделей
+# Проверить окончание запятыми во всех () и []
 class MLflowSource(Source):
     # todo: make it better
     """This is an MLflow Source"""
 
     platform = "mlflow"
-    stage_map = {
-        'Staging': 'STG',
-        'Production': 'PROD',
-    }
 
     def __init__(self, ctx: PipelineContext, config: MLflowConfig):
         super().__init__(ctx)
@@ -57,6 +56,7 @@ class MLflowSource(Source):
             tracking_uri=self.config.tracking_uri,
             registry_uri=self.config.registry_uri,
         )
+        self.env = self.config.env
 
     def get_report(self) -> SourceReport:
         return self.report
@@ -101,8 +101,7 @@ class MLflowSource(Source):
         ml_model_group_urn = builder.make_ml_model_group_urn(
             platform=self.platform,
             group_name=registered_model.name,
-            # todo: replace
-            env="PROD",
+            env=self.env,
         )
         # todo: add other options?
         # version
@@ -121,14 +120,12 @@ class MLflowSource(Source):
         ml_model_group_urn = builder.make_ml_model_group_urn(
             platform=self.platform,
             group_name=model_group_name,
-            # todo: replace
-            env="PROD",
+            env=self.env,
         )
         ml_model_urn = builder.make_ml_model_urn(
             platform=self.platform,
             model_name=f"{model_version.name}_{model_version.version}",
-            # todo: replace
-            env="PROD",
+            env=self.env,
         )
         # externalUrl: Union[None, str] = None,
         # type: Union[None, str] = None,
