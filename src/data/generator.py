@@ -1,6 +1,13 @@
-from mlflow import MlflowClient
+import os
+from random import random, randint
 
-if __name__ == '__main__':
+import mlflow
+import mlflow.sklearn
+from mlflow import MlflowClient
+from sklearn.ensemble import RandomForestRegressor
+
+
+def generate_registered_model():
     client = MlflowClient(
         tracking_uri="/Users/grigory/Prog/opensource/datahub-mlflow-source/mlruns",
     )
@@ -53,3 +60,40 @@ if __name__ == '__main__':
         name=model_name,
         source="mlruns/0/d16076a3ec534311817565e6527539c0/artifacts/sklearn-model",
     )
+
+
+def generate_registered_model_from_runs():
+    active_run = mlflow.start_run(
+        run_name="my_first_run",
+        tags=dict(
+            run_purpose="POC",
+            run_creator="hariishaa",
+        ),
+        description="This run was created for testing purposes",
+    )
+    with active_run:
+        params = {"n_estimators": 5, "random_state": 42}
+        sk_learn_rfr = RandomForestRegressor(**params)
+
+        # Log parameters and metrics using the MLflow APIs
+        # mlflow.log_params(params)
+        # mlflow.log_param("param_1", randint(0, 100))
+        mlflow.log_metrics({"metric_1": random(), "metric_2": random() + 1})
+
+        # Log the sklearn model and register as version 1
+        mlflow.sklearn.log_model(
+            sk_model=sk_learn_rfr,
+            artifact_path="sklearn-model",
+            registered_model_name="sk-learn-random-forest-reg-model-run",
+        )
+
+
+if __name__ == '__main__':
+    tracking_uri = "/Users/grigory/Prog/opensource/datahub-mlflow-source/mlruns"
+    os.environ["MLFLOW_TRACKING_URI"] = tracking_uri
+    mlflow.doctor()
+
+    print("generate_registered_model()")
+    generate_registered_model()
+    print("generate_registered_model_from_runs()")
+    generate_registered_model_from_runs()

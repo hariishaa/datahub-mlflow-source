@@ -1,4 +1,4 @@
-from typing import Iterable, List
+from typing import Iterable, List, Union
 
 import datahub.emitter.mce_builder as builder
 from datahub.configuration.common import ConfigModel
@@ -8,11 +8,14 @@ from datahub.ingestion.api.source import Source, SourceReport
 from datahub.ingestion.api.workunit import MetadataWorkUnit
 from datahub.metadata.schema_classes import (
     _Aspect,
+    MLHyperParamClass,
+    MLMetricClass,
     MLModelGroupPropertiesClass,
     MLModelPropertiesClass,
     VersionTagClass,
 )
 from mlflow import MlflowClient
+from mlflow.entities import Run, RunData
 from mlflow.entities.model_registry import RegisteredModel, ModelVersion
 from pydantic.fields import Field
 
@@ -35,8 +38,6 @@ class MLflowConfig(ConfigModel):
 
 
 # todo:
-# Сгенерировать тестовые раны
-# Добавить инфу о метриках и гиперпараметрах из ранов
 # Добавить 4 тега под статусы моделей
 # Привязать теги статусов к моделям
 # Как-то реализовать ссылку на гуи для моделей
@@ -68,9 +69,11 @@ class MLflowSource(Source):
             yield self._get_ml_group_workunit(registered_model)
             model_versions = self._get_mlflow_model_versions(registered_model)
             for model_version in model_versions:
+                run = self._get_mlflow_run(model_version)
                 yield self._get_ml_model_workunit(
-                    model_group_name=registered_model.name,
+                    registered_model=registered_model,
                     model_version=model_version,
+                    run=run,
                 )
 
     def _get_mlflow_registered_models(self) -> List[RegisteredModel]:
@@ -84,6 +87,13 @@ class MLflowSource(Source):
         filter_string = f"name = '{registered_model.name}'"
         model_versions = self.client.search_model_versions(filter_string)
         return model_versions
+
+    def _get_mlflow_run(self, model_version: ModelVersion) -> Union[Run, None]:
+        if model_version.run_id:
+            run = self.client.get_run(model_version.run_id)
+            return run
+        else:
+            return None
 
     def _create_workunit(self, urn: str, aspect: _Aspect) -> MetadataWorkUnit:
         mcp = MetadataChangeProposalWrapper(
@@ -117,26 +127,39 @@ class MLflowSource(Source):
         )
         return wu
 
-    def _get_ml_model_workunit(self, model_group_name: str, model_version: ModelVersion) -> WorkUnit:
+    def _get_ml_model_workunit(
+            self,
+            registered_model: RegisteredModel,
+            model_version: ModelVersion,
+            run: Union[Run, None]
+    ) -> WorkUnit:
+        # we use mlflow registered model as a datahub ml model group
         ml_model_group_urn = builder.make_ml_model_group_urn(
             platform=self.platform,
-            group_name=model_group_name,
+            group_name=registered_model.name,
             env=self.env,
         )
+        # we use each mlflow registered model version as a datahub ml model
         ml_model_urn = builder.make_ml_model_urn(
             platform=self.platform,
-            model_name=f"{model_version.name}_{model_version.version}",
+            model_name=f"{registered_model.name}_{model_version.version}",
             env=self.env,
         )
+        # if a model was registered without an associated run then hyperparams and metrics are not available
+        if run:
+            hyperparams = [MLHyperParamClass(name=k, value=str(v)) for k, v in run.data.params.items()]
+            training_metrics = [MLMetricClass(name=k, value=str(v)) for k, v in run.data.metrics.items()]
+        else:
+            hyperparams = None
+            training_metrics = None
         # externalUrl: Union[None, str] = None,
-        # type: Union[None, str] = None,
-        # hyperParams: Union[None, List["MLHyperParamClass"]] = None,
-        # trainingMetrics: Union[None, List["MLMetricClass"]] = None,
         ml_model_properties = MLModelPropertiesClass(
             customProperties=model_version.tags,
             description=model_version.description,
             date=model_version.creation_timestamp,
             version=VersionTagClass(versionTag=str(model_version.version)),
+            hyperParams=hyperparams,
+            trainingMetrics=training_metrics,
             # mlflow tags are dicts, but datahub tags are lists. currently use only keys from mlflow tags
             tags=list(model_version.tags),
             groups=[ml_model_group_urn],
