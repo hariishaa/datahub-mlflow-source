@@ -1,4 +1,4 @@
-from typing import Iterable, Optional, List
+from typing import Iterable, List
 
 import datahub.emitter.mce_builder as builder
 from datahub.configuration.common import ConfigModel
@@ -18,15 +18,15 @@ from pydantic.fields import Field
 
 
 class MLflowConfig(ConfigModel):
-    tracking_uri: Optional[str] = Field(
+    tracking_uri: str = Field(
         default=None,
         # https://mlflow.org/docs/latest/python_api/mlflow.html?highlight=registry_uri#mlflow.set_tracking_uri
-        description="Tracking server URI"
+        description="Tracking server URI",
     )
-    registry_uri: Optional[str] = Field(
+    registry_uri: str = Field(
         default=None,
         # https://mlflow.org/docs/latest/python_api/mlflow.html?highlight=registry_uri#mlflow.set_registry_uri
-        description="Registry server URI"
+        description="Registry server URI",
     )
     env: str = Field(
         default=builder.DEFAULT_ENV,
@@ -41,6 +41,7 @@ class MLflowConfig(ConfigModel):
 # Привязать теги статусов к моделям
 # Как-то реализовать ссылку на гуи для моделей
 # Проверить окончание запятыми во всех () и []
+# Попробовать создать nested run
 class MLflowSource(Source):
     # todo: make it better
     """This is an MLflow Source"""
