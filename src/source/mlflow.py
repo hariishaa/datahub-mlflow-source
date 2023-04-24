@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from typing import Iterable, List, Union
 
 import datahub.emitter.mce_builder as builder
@@ -8,14 +9,17 @@ from datahub.ingestion.api.source import Source, SourceReport
 from datahub.ingestion.api.workunit import MetadataWorkUnit
 from datahub.metadata.schema_classes import (
     _Aspect,
+    GlobalTagsClass,
     MLHyperParamClass,
     MLMetricClass,
     MLModelGroupPropertiesClass,
     MLModelPropertiesClass,
+    TagAssociationClass,
+    TagPropertiesClass,
     VersionTagClass,
 )
 from mlflow import MlflowClient
-from mlflow.entities import Run, RunData
+from mlflow.entities import Run
 from mlflow.entities.model_registry import RegisteredModel, ModelVersion
 from pydantic.fields import Field
 
@@ -37,9 +41,14 @@ class MLflowConfig(ConfigModel):
     )
 
 
+@dataclass
+class MLflowRegisteredModelStageInfo:
+    name: str
+    description: str
+    color_hex: str
+
+
 # todo:
-# Добавить 4 тега под статусы моделей
-# Привязать теги статусов к моделям
 # Как-то реализовать ссылку на гуи для моделей
 # Проверить окончание запятыми во всех () и []
 # Попробовать создать nested run
@@ -48,6 +57,28 @@ class MLflowSource(Source):
     """This is an MLflow Source"""
 
     platform = "mlflow"
+    registered_model_stages_info = [
+        MLflowRegisteredModelStageInfo(
+            name="Production",
+            description="Production Stage for an ML model in MLflow Model Registry",
+            color_hex="#308613",
+        ),
+        MLflowRegisteredModelStageInfo(
+            name="Staging",
+            description="Staging Stage for an ML model in MLflow Model Registry",
+            color_hex="#FACB66",
+        ),
+        MLflowRegisteredModelStageInfo(
+            name="Archived",
+            description="Archived Stage for an ML model in MLflow Model Registry",
+            color_hex="#5D7283",
+        ),
+        MLflowRegisteredModelStageInfo(
+            name="None",
+            description="None Stage for an ML model in MLflow Model Registry",
+            color_hex="#F2F4F5",
+        ),
+    ]
 
     def __init__(self, ctx: PipelineContext, config: MLflowConfig):
         super().__init__(ctx)
@@ -64,23 +95,90 @@ class MLflowSource(Source):
         return self.report
 
     def get_workunits(self) -> Iterable[WorkUnit]:
+        # at first, create tags for each stage in mlflow model registry
+        yield from self._get_mlflow_model_registry_stage_workunits()
+        # then ingest metadata for model in a model registry and associate their stages with previously created tags
+        yield from self._get_ml_model_workunits()
+
+    def _get_mlflow_model_registry_stage_workunits(self) -> Iterable[WorkUnit]:
+        for stage_info in self.registered_model_stages_info:
+            tag_urn = self._make_stage_tag_urn(stage_info.name)
+            tag_properties = TagPropertiesClass(
+                name=self._make_stage_tag_name(stage_info.name),
+                description=stage_info.description,
+                colorHex=stage_info.color_hex,
+            )
+            wu = self._create_workunit(
+                urn=tag_urn,
+                aspect=tag_properties,
+            )
+            yield wu
+
+    def _make_stage_tag_urn(self, stage_name: str) -> str:
+        tag_name = self._make_stage_tag_name(stage_name)
+        tag_urn = builder.make_tag_urn(tag_name)
+        return tag_urn
+
+    def _make_stage_tag_name(self, stage_name: str) -> str:
+        return f"{self.platform}_{stage_name.lower()}"
+
+    def _create_workunit(self, urn: str, aspect: _Aspect) -> MetadataWorkUnit:
+        mcp = MetadataChangeProposalWrapper(
+            entityUrn=urn,
+            aspect=aspect,
+        )
+        wu = MetadataWorkUnit(
+            id=urn,
+            mcp=mcp,
+        )
+        self.report.report_workunit(wu)
+        return wu
+
+    def _get_ml_model_workunits(self) -> Iterable[WorkUnit]:
         registered_models = self._get_mlflow_registered_models()
         for registered_model in registered_models:
             yield self._get_ml_group_workunit(registered_model)
             model_versions = self._get_mlflow_model_versions(registered_model)
             for model_version in model_versions:
                 run = self._get_mlflow_run(model_version)
-                yield self._get_ml_model_workunit(
+                yield self._get_ml_model_properties_workunit(
                     registered_model=registered_model,
                     model_version=model_version,
                     run=run,
                 )
+                yield self._get_global_tags_workunit(
+                    model_version=model_version,
+                )
 
+    # todo: replace List with Iterable?
     def _get_mlflow_registered_models(self) -> List[RegisteredModel]:
         # todo: implement pagination
         # todo: where all RegisteredModel properties like aliases come from?
         registered_models = self.client.search_registered_models()
         return registered_models
+
+    def _get_ml_group_workunit(self, registered_model: RegisteredModel) -> WorkUnit:
+        ml_model_group_urn = self._make_ml_model_group_urn(registered_model)
+        # todo: add other options?
+        # version
+        ml_model_group_properties = MLModelGroupPropertiesClass(
+            customProperties=registered_model.tags,
+            description=registered_model.description,
+            createdAt=registered_model.creation_timestamp,
+        )
+        wu = self._create_workunit(
+            urn=ml_model_group_urn,
+            aspect=ml_model_group_properties,
+        )
+        return wu
+
+    def _make_ml_model_group_urn(self, registered_model: RegisteredModel) -> str:
+        urn = builder.make_ml_model_group_urn(
+            platform=self.platform,
+            group_name=registered_model.name,
+            env=self.env,
+        )
+        return urn
 
     def _get_mlflow_model_versions(self, registered_model: RegisteredModel) -> List[ModelVersion]:
         # todo: implement pagination
@@ -95,56 +193,16 @@ class MLflowSource(Source):
         else:
             return None
 
-    def _create_workunit(self, urn: str, aspect: _Aspect) -> MetadataWorkUnit:
-        mcp = MetadataChangeProposalWrapper(
-            entityUrn=urn,
-            aspect=aspect,
-        )
-        wu = MetadataWorkUnit(
-            id=urn,
-            mcp=mcp,
-        )
-        self.report.report_workunit(wu)
-        return wu
-
-    # todo: replace List with Iterable?
-    def _get_ml_group_workunit(self, registered_model: RegisteredModel) -> WorkUnit:
-        ml_model_group_urn = builder.make_ml_model_group_urn(
-            platform=self.platform,
-            group_name=registered_model.name,
-            env=self.env,
-        )
-        # todo: add other options?
-        # version
-        ml_model_group_properties = MLModelGroupPropertiesClass(
-            customProperties=registered_model.tags,
-            description=registered_model.description,
-            createdAt=registered_model.creation_timestamp,
-        )
-        wu = self._create_workunit(
-            urn=ml_model_group_urn,
-            aspect=ml_model_group_properties,
-        )
-        return wu
-
-    def _get_ml_model_workunit(
+    def _get_ml_model_properties_workunit(
             self,
             registered_model: RegisteredModel,
             model_version: ModelVersion,
             run: Union[Run, None]
     ) -> WorkUnit:
         # we use mlflow registered model as a datahub ml model group
-        ml_model_group_urn = builder.make_ml_model_group_urn(
-            platform=self.platform,
-            group_name=registered_model.name,
-            env=self.env,
-        )
+        ml_model_group_urn = self._make_ml_model_group_urn(registered_model)
         # we use each mlflow registered model version as a datahub ml model
-        ml_model_urn = builder.make_ml_model_urn(
-            platform=self.platform,
-            model_name=f"{registered_model.name}_{model_version.version}",
-            env=self.env,
-        )
+        ml_model_urn = self._make_ml_model_urn(model_version)
         # if a model was registered without an associated run then hyperparams and metrics are not available
         if run:
             hyperparams = [MLHyperParamClass(name=k, value=str(v)) for k, v in run.data.params.items()]
@@ -167,6 +225,26 @@ class MLflowSource(Source):
         wu = self._create_workunit(
             urn=ml_model_urn,
             aspect=ml_model_properties,
+        )
+        return wu
+
+    def _make_ml_model_urn(self, model_version: ModelVersion) -> str:
+        urn = builder.make_ml_model_urn(
+            platform=self.platform,
+            model_name=f"{model_version.name}_{model_version.version}",
+            env=self.env,
+        )
+        return urn
+
+    def _get_global_tags_workunit(self, model_version: ModelVersion) -> WorkUnit:
+        global_tags = GlobalTagsClass(
+            tags=[
+                TagAssociationClass(tag=self._make_stage_tag_urn(model_version.current_stage))
+            ]
+        )
+        wu = self._create_workunit(
+            urn=self._make_ml_model_urn(model_version),
+            aspect=global_tags,
         )
         return wu
 
