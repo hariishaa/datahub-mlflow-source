@@ -50,7 +50,6 @@ class MLflowRegisteredModelStageInfo:
 
 # todo:
 # Проверить окончание запятыми во всех () и []
-# Попробовать создать nested run
 # Попробовать поставить mlflow-skinny поверх mlflow и заменить mlflow mlflow-skinny
 class MLflowSource(Source):
     # todo: make it better
