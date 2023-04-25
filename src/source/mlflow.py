@@ -36,6 +36,10 @@ class MLflowConfig(ConfigModel):
         # https://mlflow.org/docs/latest/python_api/mlflow.html?highlight=registry_uri#mlflow.set_registry_uri
         description="Registry server URI",
     )
+    model_name_separator: str = Field(
+        default="_",
+        description="A string which separates mlflow registered model name from its version (e.g. model_1 or model-1)",
+    )
     env: str = Field(
         default=builder.DEFAULT_ENV,
         description="Environment to use in namespace when constructing URNs.",
@@ -50,7 +54,6 @@ class MLflowRegisteredModelStageInfo:
 
 
 # todo:
-# Сделать параметризированный разделитель для названия моделей (_/-)
 # Проверить окончание запятыми во всех () и []
 # Попробовать поставить mlflow-skinny поверх mlflow и заменить mlflow mlflow-skinny
 class MLflowSource(Source):
@@ -259,7 +262,7 @@ class MLflowSource(Source):
     def _make_ml_model_urn(self, model_version: ModelVersion) -> str:
         urn = builder.make_ml_model_urn(
             platform=self.platform,
-            model_name=f"{model_version.name}_{model_version.version}",
+            model_name=f"{model_version.name}{self.config.model_name_separator}{model_version.version}",
             env=self.env,
         )
         return urn
