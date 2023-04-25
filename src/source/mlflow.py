@@ -94,7 +94,6 @@ class MLflowSource(Source):
             tracking_uri=self.config.tracking_uri,
             registry_uri=self.config.registry_uri,
         )
-        self.env = self.config.env
 
     def get_report(self) -> SourceReport:
         return self.report
@@ -198,7 +197,7 @@ class MLflowSource(Source):
         urn = builder.make_ml_model_group_urn(
             platform=self.platform,
             group_name=registered_model.name,
-            env=self.env,
+            env=self.config.env,
         )
         return urn
 
@@ -263,7 +262,7 @@ class MLflowSource(Source):
         urn = builder.make_ml_model_urn(
             platform=self.platform,
             model_name=f"{model_version.name}{self.config.model_name_separator}{model_version.version}",
-            env=self.env,
+            env=self.config.env,
         )
         return urn
 
