@@ -49,9 +49,9 @@ class MLflowRegisteredModelStageInfo:
 
 
 # todo:
-# Как-то реализовать ссылку на гуи для моделей
 # Проверить окончание запятыми во всех () и []
 # Попробовать создать nested run
+# Попробовать поставить mlflow-skinny поверх mlflow и заменить mlflow mlflow-skinny
 class MLflowSource(Source):
     # todo: make it better
     """This is an MLflow Source"""
@@ -210,9 +210,9 @@ class MLflowSource(Source):
         else:
             hyperparams = None
             training_metrics = None
-        # externalUrl: Union[None, str] = None,
         ml_model_properties = MLModelPropertiesClass(
             customProperties=model_version.tags,
+            externalUrl=model_version.run_link,
             description=model_version.description,
             date=model_version.creation_timestamp,
             version=VersionTagClass(versionTag=str(model_version.version)),
