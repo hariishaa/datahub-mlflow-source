@@ -7,17 +7,16 @@ if __name__ == '__main__':
         ctx=PipelineContext(run_id="dummy"),
         config=MLflowConfig(tracking_uri="/Users/grigory/Prog/opensource/datahub-mlflow-source/mlruns"),
     )
-    registered_models = source._get_mlflow_registered_models()
+    registered_models = source._get_mlflow_registered_models(max_results=1)
     for rm in registered_models:
         print(f"--- {rm.name} ---")
-        model_versions = source._get_mlflow_model_versions(registered_model=rm)
+        model_versions = source._get_mlflow_model_versions(registered_model=rm, max_results=1)
         for mv in model_versions:
             print(f"--- Version {mv.version} ---")
-            print(mv)
-            run = source._get_mlflow_run(mv)
-            if not run:
-                continue
-            print(run)
-            print(run.data.params)
-            print(run.data.metrics)
-
+            # print(mv)
+            # run = source._get_mlflow_run(mv)
+            # if not run:
+            #     continue
+            # print(run)
+            # print(run.data.params)
+            # print(run.data.metrics)

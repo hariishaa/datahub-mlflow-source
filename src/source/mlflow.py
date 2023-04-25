@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Iterable, List, Union
+from typing import Iterable, List, Union, Callable, Any, T
 
 import datahub.emitter.mce_builder as builder
 from datahub.configuration.common import ConfigModel
@@ -21,6 +21,7 @@ from datahub.metadata.schema_classes import (
 from mlflow import MlflowClient
 from mlflow.entities import Run
 from mlflow.entities.model_registry import RegisteredModel, ModelVersion
+from mlflow.store.entities import PagedList
 from pydantic.fields import Field
 
 
@@ -49,6 +50,7 @@ class MLflowRegisteredModelStageInfo:
 
 
 # todo:
+# Сделать параметризированный разделитель для названия моделей (_/-)
 # Проверить окончание запятыми во всех () и []
 # Попробовать поставить mlflow-skinny поверх mlflow и заменить mlflow mlflow-skinny
 class MLflowSource(Source):
@@ -56,6 +58,7 @@ class MLflowSource(Source):
     """This is an MLflow Source"""
 
     platform = "mlflow"
+    # todo: make immutable
     registered_model_stages_info = [
         MLflowRegisteredModelStageInfo(
             name="Production",
@@ -145,16 +148,33 @@ class MLflowSource(Source):
                     model_version=model_version,
                     run=run,
                 )
+                # todo: make oneliner
                 yield self._get_global_tags_workunit(
                     model_version=model_version,
                 )
 
-    # todo: replace List with Iterable?
-    def _get_mlflow_registered_models(self) -> List[RegisteredModel]:
-        # todo: implement pagination
-        # todo: where all RegisteredModel properties like aliases come from?
-        registered_models = self.client.search_registered_models()
+    # todo: remove max_results?
+    # max_results here is for debugging purposes
+    def _get_mlflow_registered_models(self, max_results: int = 1) -> Iterable[RegisteredModel]:
+        registered_models = self._traverse_mlflow_search_func(
+            search_func=self.client.search_registered_models,
+            max_results=max_results,
+        )
         return registered_models
+
+    @staticmethod
+    def _traverse_mlflow_search_func(search_func: Callable[..., PagedList[T]], **kwargs) -> Iterable[T]:
+        next_page_token = None
+        all_pages_where_traversed = False
+        while not all_pages_where_traversed:
+            paged_list = search_func(
+                **kwargs,
+                page_token=next_page_token,
+            )
+            yield from paged_list.to_list()
+            next_page_token = paged_list.token
+            if not next_page_token:
+                all_pages_where_traversed = True
 
     def _get_ml_group_workunit(self, registered_model: RegisteredModel) -> WorkUnit:
         ml_model_group_urn = self._make_ml_model_group_urn(registered_model)
@@ -179,10 +199,19 @@ class MLflowSource(Source):
         )
         return urn
 
-    def _get_mlflow_model_versions(self, registered_model: RegisteredModel) -> List[ModelVersion]:
-        # todo: implement pagination
+    # todo: remove max_results?
+    # max_results here is for debugging purposes
+    def _get_mlflow_model_versions(
+            self,
+            registered_model: RegisteredModel,
+            max_results: int = 10000
+    ) -> Iterable[ModelVersion]:
         filter_string = f"name = '{registered_model.name}'"
-        model_versions = self.client.search_model_versions(filter_string)
+        model_versions = self._traverse_mlflow_search_func(
+            search_func=self.client.search_model_versions,
+            filter_string=filter_string,
+            max_results=max_results,
+        )
         return model_versions
 
     def _get_mlflow_run(self, model_version: ModelVersion) -> Union[Run, None]:

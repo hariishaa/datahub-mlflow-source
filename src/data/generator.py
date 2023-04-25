@@ -84,7 +84,7 @@ def generate_registered_model_from_runs():
         mlflow.sklearn.log_model(
             sk_model=sk_learn_rfr,
             artifact_path="sklearn-model",
-            registered_model_name="sk-learn-random-forest-reg-model-run",
+            registered_model_name="sk-learn-random-forest-reg-model-run-1",
         )
 
 
@@ -128,7 +128,7 @@ if __name__ == '__main__':
 
     # print("generate_registered_model()")
     # generate_registered_model()
-    # print("generate_registered_model_from_runs()")
-    # generate_registered_model_from_runs()
-    print("generate_nested_runs()")
-    generate_nested_runs()
+    print("generate_registered_model_from_runs()")
+    generate_registered_model_from_runs()
+    # print("generate_nested_runs()")
+    # generate_nested_runs()
