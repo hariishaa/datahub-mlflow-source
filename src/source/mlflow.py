@@ -26,6 +26,7 @@ from pydantic.fields import Field
 
 T = TypeVar('T')
 
+
 class MLflowConfig(ConfigModel):
     tracking_uri: str = Field(
         default=None,
@@ -55,15 +56,13 @@ class MLflowRegisteredModelStageInfo:
 
 
 # todo:
-# Проверить окончание запятыми во всех () и []
 # Попробовать поставить mlflow-skinny поверх mlflow и заменить mlflow mlflow-skinny
 class MLflowSource(Source):
     # todo: make it better
     """This is an MLflow Source"""
 
     platform = "mlflow"
-    # todo: make immutable
-    registered_model_stages_info = [
+    registered_model_stages_info = (
         MLflowRegisteredModelStageInfo(
             name="Production",
             description="Production Stage for an ML model in MLflow Model Registry",
@@ -84,7 +83,7 @@ class MLflowSource(Source):
             description="None Stage for an ML model in MLflow Model Registry",
             color_hex="#F2F4F5",
         ),
-    ]
+    )
 
     def __init__(self, ctx: PipelineContext, config: MLflowConfig):
         super().__init__(ctx)
@@ -151,10 +150,7 @@ class MLflowSource(Source):
                     model_version=model_version,
                     run=run,
                 )
-                # todo: make oneliner
-                yield self._get_global_tags_workunit(
-                    model_version=model_version,
-                )
+                yield self._get_global_tags_workunit(model_version=model_version)
 
     # todo: remove max_results?
     # max_results here is for debugging purposes
@@ -181,8 +177,6 @@ class MLflowSource(Source):
 
     def _get_ml_group_workunit(self, registered_model: RegisteredModel) -> WorkUnit:
         ml_model_group_urn = self._make_ml_model_group_urn(registered_model)
-        # todo: add other options?
-        # version
         ml_model_group_properties = MLModelGroupPropertiesClass(
             customProperties=registered_model.tags,
             description=registered_model.description,
@@ -207,7 +201,7 @@ class MLflowSource(Source):
     def _get_mlflow_model_versions(
             self,
             registered_model: RegisteredModel,
-            max_results: int = 10000
+            max_results: int = 10000,
     ) -> Iterable[ModelVersion]:
         filter_string = f"name = '{registered_model.name}'"
         model_versions = self._traverse_mlflow_search_func(
@@ -228,7 +222,7 @@ class MLflowSource(Source):
             self,
             registered_model: RegisteredModel,
             model_version: ModelVersion,
-            run: Union[Run, None]
+            run: Union[Run, None],
     ) -> WorkUnit:
         # we use mlflow registered model as a datahub ml model group
         ml_model_group_urn = self._make_ml_model_group_urn(registered_model)
@@ -270,7 +264,7 @@ class MLflowSource(Source):
     def _get_global_tags_workunit(self, model_version: ModelVersion) -> WorkUnit:
         global_tags = GlobalTagsClass(
             tags=[
-                TagAssociationClass(tag=self._make_stage_tag_urn(model_version.current_stage))
+                TagAssociationClass(tag=self._make_stage_tag_urn(model_version.current_stage)),
             ]
         )
         wu = self._create_workunit(
