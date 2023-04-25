@@ -55,8 +55,6 @@ class MLflowRegisteredModelStageInfo:
     color_hex: str
 
 
-# todo:
-# Попробовать поставить mlflow-skinny поверх mlflow и заменить mlflow mlflow-skinny
 class MLflowSource(Source):
     # todo: make it better
     """This is an MLflow Source"""
