@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Iterable, List, Union, Callable, Any, T
+from typing import Iterable, Union, Callable, TypeVar
 
 import datahub.emitter.mce_builder as builder
 from datahub.configuration.common import ConfigModel
@@ -24,6 +24,7 @@ from mlflow.entities.model_registry import RegisteredModel, ModelVersion
 from mlflow.store.entities import PagedList
 from pydantic.fields import Field
 
+T = TypeVar('T')
 
 class MLflowConfig(ConfigModel):
     tracking_uri: str = Field(
