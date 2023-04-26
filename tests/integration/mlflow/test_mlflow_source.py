@@ -1,4 +1,3 @@
-from pathlib import Path
 from typing import Dict, TypeVar
 
 import pytest
@@ -11,38 +10,38 @@ T = TypeVar("T")
 
 
 @pytest.fixture
-def tracking_uri(tmp_path) -> Path:
-    return tmp_path / "mlruns"
+def tracking_uri(tmp_path) -> str:
+    return str(tmp_path / "mlruns")
 
 
 @pytest.fixture
-def sink_file_path(tmp_path) -> Path:
-    return tmp_path / "mlflow_source_mcps.json"
+def sink_file_path(tmp_path) -> str:
+    return str(tmp_path / "mlflow_source_mcps.json")
 
 
 @pytest.fixture
-def pipeline_config(tracking_uri: Path, sink_file_path: Path) -> Dict[str, T]:
+def pipeline_config(tracking_uri: str, sink_file_path: str) -> Dict[str, T]:
     source_type = "source.mlflow.MLflowSource"
     return {
         "run_id": "mlflow-source-test",
         "source": {
             "type": source_type,
             "config": {
-                "tracking_uri": str(tracking_uri),
+                "tracking_uri": tracking_uri,
             },
         },
         "sink": {
             "type": "file",
             "config": {
-                "filename": str(sink_file_path),
+                "filename": sink_file_path,
             },
         },
     }
 
 
 @pytest.fixture
-def generate_mlflow_data(tracking_uri: Path) -> None:
-    client = MlflowClient(tracking_uri=str(tracking_uri))
+def generate_mlflow_data(tracking_uri: str) -> None:
+    client = MlflowClient(tracking_uri=tracking_uri)
     experiment_name = "test-experiment"
     run_name = "test-run"
     model_name = "test-model"
@@ -80,10 +79,6 @@ def generate_mlflow_data(tracking_uri: Path) -> None:
         version="1",
         stage="Archived",
     )
-
-
-# todo:
-# Проверить работу конфигураций
 
 
 def test_ingestion(pytestconfig, mock_time, sink_file_path, pipeline_config, generate_mlflow_data):
