@@ -121,6 +121,49 @@ def generate_nested_runs():
     print(results[["run_id", "params.child", "tags.mlflow.runName"]])
 
 
+def generate_registered_model_with_run():
+    client = MlflowClient(
+        tracking_uri="/Users/grigory/Prog/opensource/datahub-mlflow-source/mlruns",
+    )
+    experiment_name = "test-experiment"
+    run_name = "test-run"
+    model_name = "test-model"
+    test_experiment_id = client.create_experiment(experiment_name)
+    test_run = client.create_run(
+        experiment_id=test_experiment_id,
+        run_name=run_name,
+    )
+    client.log_param(
+        run_id=test_run.info.run_id,
+        key="p",
+        value=1,
+    )
+    client.log_metric(
+        run_id=test_run.info.run_id,
+        key="m",
+        value=0.85,
+    )
+    client.create_registered_model(
+        name=model_name,
+        tags=dict(
+            model_id=1,
+            model_env="test",
+        ),
+        description="This is the first registered model",
+    )
+    client.create_model_version(
+        name=model_name,
+        source="dummy_dir/dummy_file",
+        run_id=test_run.info.run_id,
+        tags=dict(model_version_id=1),
+    )
+    client.transition_model_version_stage(
+        name=model_name,
+        version="1",
+        stage="Archived",
+    )
+
+
 if __name__ == '__main__':
     tracking_uri = "/Users/grigory/Prog/opensource/datahub-mlflow-source/mlruns"
     os.environ["MLFLOW_TRACKING_URI"] = tracking_uri
@@ -128,7 +171,9 @@ if __name__ == '__main__':
 
     # print("generate_registered_model()")
     # generate_registered_model()
-    print("generate_registered_model_from_runs()")
-    generate_registered_model_from_runs()
+    # print("generate_registered_model_from_runs()")
+    # generate_registered_model_from_runs()
     # print("generate_nested_runs()")
     # generate_nested_runs()
+    print("generate_registered_model_with_run()")
+    generate_registered_model_with_run()

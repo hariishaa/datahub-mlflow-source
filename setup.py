@@ -12,5 +12,6 @@ setup(
     extras_require={
         "mlflow": ["mlflow"],
         "mlflow-skinny": ["mlflow-skinny"],
-    }
+    },
+    tests_require=["pytest", "deepdiff"],
 )

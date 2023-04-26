@@ -235,6 +235,7 @@ class MLflowSource(Source):
             training_metrics = None
         ml_model_properties = MLModelPropertiesClass(
             customProperties=model_version.tags,
+            # todo: populate this from config
             externalUrl=model_version.run_link,
             description=model_version.description,
             date=model_version.creation_timestamp,

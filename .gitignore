@@ -3,3 +3,4 @@ venv/
 *.egg-info/
 mlruns/
 file_sink/
+.pytest_cache/

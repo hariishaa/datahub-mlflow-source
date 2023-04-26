@@ -23,3 +23,7 @@ datahub ingest -c recipe.dhub.yaml
 mlflow ui
 
 pip install -e ".[mlflow-skinny]" -q
+
+pytest tests/integration/mlflow/test_mlflow_source.py --update-golden-files
+
+pytest tests/integration/mlflow/test_mlflow_source.py -rP
