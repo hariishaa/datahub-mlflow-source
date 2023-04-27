@@ -1,5 +1,5 @@
 import datetime
-from typing import TypeVar
+from typing import TypeVar, Union
 
 import pytest
 from datahub.ingestion.api.common import PipelineContext
@@ -37,7 +37,7 @@ def model_version(source: MLflowSource, registered_model: RegisteredModel) -> Mo
     )
 
 
-def dummy_search_func(page_token, **kwargs) -> PagedList[T]:
+def dummy_search_func(page_token: Union[None, str], **kwargs) -> PagedList[T]:
     dummy_pages = dict(
         page_1=PagedList(items=["a", "b"], token="page_2"),
         page_2=PagedList(items=["c", "d"], token="page_3"),
@@ -112,7 +112,7 @@ def test_traverse_mlflow_search_func_with_kwargs(source):
 def test_make_external_link_local(source, model_version):
     expected_url = None
 
-    url = source._make_external_link(model_version)
+    url = source._make_external_url(model_version)
 
     assert url == expected_url
 
@@ -122,7 +122,7 @@ def test_make_external_link_remote(source, model_version):
     source.client = MlflowClient(tracking_uri=tracking_uri_remote)
     expected_url = f"{tracking_uri_remote}/#/models/{model_version.name}/versions/{model_version.version}"
 
-    url = source._make_external_link(model_version)
+    url = source._make_external_url(model_version)
 
     assert url == expected_url
 
@@ -132,6 +132,6 @@ def test_make_external_link_tracking_ui_address(source, model_version):
     source.config.tracking_ui_address = tracking_ui_address
     expected_url = f"{tracking_ui_address}/#/models/{model_version.name}/versions/{model_version.version}"
 
-    url = source._make_external_link(model_version)
+    url = source._make_external_url(model_version)
 
     assert url == expected_url

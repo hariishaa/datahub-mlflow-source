@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Dict, TypeVar
 
 import pytest
@@ -10,12 +11,12 @@ T = TypeVar("T")
 
 
 @pytest.fixture
-def tracking_uri(tmp_path) -> str:
+def tracking_uri(tmp_path: Path) -> str:
     return str(tmp_path / "mlruns")
 
 
 @pytest.fixture
-def sink_file_path(tmp_path) -> str:
+def sink_file_path(tmp_path: Path) -> str:
     return str(tmp_path / "mlflow_source_mcps.json")
 
 

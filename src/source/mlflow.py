@@ -30,12 +30,10 @@ T = TypeVar('T')
 class MLflowConfig(ConfigModel):
     tracking_uri: str = Field(
         default=None,
-        # https://mlflow.org/docs/latest/python_api/mlflow.html?highlight=registry_uri#mlflow.set_tracking_uri
         description="Tracking server URI",
     )
     registry_uri: str = Field(
         default=None,
-        # https://mlflow.org/docs/latest/python_api/mlflow.html?highlight=registry_uri#mlflow.set_registry_uri
         description="Registry server URI",
     )
     model_name_separator: str = Field(
@@ -62,7 +60,6 @@ class MLflowRegisteredModelStageInfo:
 
 
 class MLflowSource(Source):
-    # todo: make it better
     """This is an MLflow Source"""
 
     platform = "mlflow"
@@ -92,7 +89,6 @@ class MLflowSource(Source):
     def __init__(self, ctx: PipelineContext, config: MLflowConfig):
         super().__init__(ctx)
         self.config = config
-        # todo: make custom report?
         self.report = SourceReport()
         self.client = MlflowClient(
             tracking_uri=self.config.tracking_uri,
@@ -116,10 +112,7 @@ class MLflowSource(Source):
                 description=stage_info.description,
                 colorHex=stage_info.color_hex,
             )
-            wu = self._create_workunit(
-                urn=tag_urn,
-                aspect=tag_properties,
-            )
+            wu = self._create_workunit(urn=tag_urn, aspect=tag_properties)
             yield wu
 
     def _make_stage_tag_urn(self, stage_name: str) -> str:
@@ -131,14 +124,8 @@ class MLflowSource(Source):
         return f"{self.platform}_{stage_name.lower()}"
 
     def _create_workunit(self, urn: str, aspect: _Aspect) -> MetadataWorkUnit:
-        mcp = MetadataChangeProposalWrapper(
-            entityUrn=urn,
-            aspect=aspect,
-        )
-        wu = MetadataWorkUnit(
-            id=urn,
-            mcp=mcp,
-        )
+        mcp = MetadataChangeProposalWrapper(entityUrn=urn, aspect=aspect)
+        wu = MetadataWorkUnit(id=urn, mcp=mcp)
         self.report.report_workunit(wu)
         return wu
 
@@ -156,12 +143,9 @@ class MLflowSource(Source):
                 )
                 yield self._get_global_tags_workunit(model_version=model_version)
 
-    # todo: remove max_results?
-    # max_results here is for debugging purposes
-    def _get_mlflow_registered_models(self, max_results: int = 1) -> Iterable[RegisteredModel]:
+    def _get_mlflow_registered_models(self) -> Iterable[RegisteredModel]:
         registered_models = self._traverse_mlflow_search_func(
             search_func=self.client.search_registered_models,
-            max_results=max_results,
         )
         return registered_models
 
@@ -170,10 +154,7 @@ class MLflowSource(Source):
         next_page_token = None
         all_pages_where_traversed = False
         while not all_pages_where_traversed:
-            paged_list = search_func(
-                **kwargs,
-                page_token=next_page_token,
-            )
+            paged_list = search_func(page_token=next_page_token, **kwargs)
             yield from paged_list.to_list()
             next_page_token = paged_list.token
             if not next_page_token:
@@ -186,10 +167,7 @@ class MLflowSource(Source):
             description=registered_model.description,
             createdAt=registered_model.creation_timestamp,
         )
-        wu = self._create_workunit(
-            urn=ml_model_group_urn,
-            aspect=ml_model_group_properties,
-        )
+        wu = self._create_workunit(urn=ml_model_group_urn, aspect=ml_model_group_properties)
         return wu
 
     def _make_ml_model_group_urn(self, registered_model: RegisteredModel) -> str:
@@ -200,22 +178,15 @@ class MLflowSource(Source):
         )
         return urn
 
-    # todo: remove max_results?
-    # max_results here is for debugging purposes
-    def _get_mlflow_model_versions(
-            self,
-            registered_model: RegisteredModel,
-            max_results: int = 10000,
-    ) -> Iterable[ModelVersion]:
+    def _get_mlflow_model_versions(self, registered_model: RegisteredModel) -> Iterable[ModelVersion]:
         filter_string = f"name = '{registered_model.name}'"
         model_versions = self._traverse_mlflow_search_func(
             search_func=self.client.search_model_versions,
             filter_string=filter_string,
-            max_results=max_results,
         )
         return model_versions
 
-    def _get_mlflow_run(self, model_version: ModelVersion) -> Union[Run, None]:
+    def _get_mlflow_run(self, model_version: ModelVersion) -> Union[None, Run]:
         if model_version.run_id:
             run = self.client.get_run(model_version.run_id)
             return run
@@ -226,7 +197,7 @@ class MLflowSource(Source):
             self,
             registered_model: RegisteredModel,
             model_version: ModelVersion,
-            run: Union[Run, None],
+            run: Union[None, Run],
     ) -> WorkUnit:
         # we use mlflow registered model as a datahub ml model group
         ml_model_group_urn = self._make_ml_model_group_urn(registered_model)
@@ -241,20 +212,17 @@ class MLflowSource(Source):
             training_metrics = None
         ml_model_properties = MLModelPropertiesClass(
             customProperties=model_version.tags,
-            externalUrl=self._make_external_link(model_version),
+            externalUrl=self._make_external_url(model_version),
             description=model_version.description,
             date=model_version.creation_timestamp,
             version=VersionTagClass(versionTag=str(model_version.version)),
             hyperParams=hyperparams,
             trainingMetrics=training_metrics,
             # mlflow tags are dicts, but datahub tags are lists. currently use only keys from mlflow tags
-            tags=list(model_version.tags),
+            tags=list(model_version.tags.keys()),
             groups=[ml_model_group_urn],
         )
-        wu = self._create_workunit(
-            urn=ml_model_urn,
-            aspect=ml_model_properties,
-        )
+        wu = self._create_workunit(urn=ml_model_urn, aspect=ml_model_properties)
         return wu
 
     def _make_ml_model_urn(self, model_version: ModelVersion) -> str:
@@ -265,7 +233,7 @@ class MLflowSource(Source):
         )
         return urn
 
-    def _make_external_link(self, model_version: ModelVersion) -> Union[None, str]:
+    def _make_external_url(self, model_version: ModelVersion) -> Union[None, str]:
         if self.config.tracking_ui_address:
             base_uri = self.config.tracking_ui_address
         else:
@@ -281,10 +249,7 @@ class MLflowSource(Source):
                 TagAssociationClass(tag=self._make_stage_tag_urn(model_version.current_stage)),
             ]
         )
-        wu = self._create_workunit(
-            urn=self._make_ml_model_urn(model_version),
-            aspect=global_tags,
-        )
+        wu = self._create_workunit(urn=self._make_ml_model_urn(model_version), aspect=global_tags)
         return wu
 
     @classmethod
