@@ -46,6 +46,12 @@ class MLflowConfig(ConfigModel):
         default=builder.DEFAULT_ENV,
         description="Environment to use in namespace when constructing URNs.",
     )
+    tracking_ui_address: str = Field(
+        default=None,
+        description="""
+        Tracking UI address if it is differ from the tracking_uri. Starts with http(s):// (e.g. http://localhost:5000)
+        """,
+    )
 
 
 @dataclass
@@ -235,8 +241,7 @@ class MLflowSource(Source):
             training_metrics = None
         ml_model_properties = MLModelPropertiesClass(
             customProperties=model_version.tags,
-            # todo: populate this from config
-            externalUrl=model_version.run_link,
+            externalUrl=self._make_external_link(model_version),
             description=model_version.description,
             date=model_version.creation_timestamp,
             version=VersionTagClass(versionTag=str(model_version.version)),
@@ -259,6 +264,16 @@ class MLflowSource(Source):
             env=self.config.env,
         )
         return urn
+
+    def _make_external_link(self, model_version: ModelVersion) -> Union[None, str]:
+        if self.config.tracking_ui_address:
+            base_uri = self.config.tracking_ui_address
+        else:
+            base_uri = self.client.tracking_uri
+        if base_uri.startswith("http"):
+            return f"{base_uri.rstrip('/')}/#/models/{model_version.name}/versions/{model_version.version}"
+        else:
+            return None
 
     def _get_global_tags_workunit(self, model_version: ModelVersion) -> WorkUnit:
         global_tags = GlobalTagsClass(

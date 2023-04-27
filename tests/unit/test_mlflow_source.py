@@ -3,6 +3,7 @@ from typing import TypeVar
 
 import pytest
 from datahub.ingestion.api.common import PipelineContext
+from mlflow import MlflowClient
 from mlflow.entities.model_registry import RegisteredModel
 from mlflow.entities.model_registry.model_version import ModelVersion
 from mlflow.store.entities import PagedList
@@ -13,15 +14,10 @@ T = TypeVar('T')
 
 
 @pytest.fixture
-def tracking_uri(tmp_path) -> str:
-    return str(tmp_path / "mlruns")
-
-
-@pytest.fixture
-def source(tracking_uri: str) -> MLflowSource:
+def source() -> MLflowSource:
     return MLflowSource(
         ctx=PipelineContext(run_id="mlflow-source-test"),
-        config=MLflowConfig(tracking_uri=tracking_uri),
+        config=MLflowConfig(),
     )
 
 
@@ -73,7 +69,7 @@ def test_stages(source):
     assert set(names) == {"mlflow_" + str(stage).lower() for stage in mlflow_registered_model_stages}
 
 
-def test_separator(source, model_version):
+def test_config_model_name_separator(source, model_version):
     name_version_sep = "+"
     source.config.model_name_separator = name_version_sep
     expected_model_name = f"{model_version.name}{name_version_sep}{model_version.version}"
@@ -111,3 +107,31 @@ def test_traverse_mlflow_search_func_with_kwargs(source):
     items = list(source._traverse_mlflow_search_func(dummy_search_func, case="upper"))
 
     assert items == expected_items
+
+
+def test_make_external_link_local(source, model_version):
+    expected_url = None
+
+    url = source._make_external_link(model_version)
+
+    assert url == expected_url
+
+
+def test_make_external_link_remote(source, model_version):
+    tracking_uri_remote = "https://dummy-mlflow-tracking-server.org"
+    source.client = MlflowClient(tracking_uri=tracking_uri_remote)
+    expected_url = f"{tracking_uri_remote}/#/models/{model_version.name}/versions/{model_version.version}"
+
+    url = source._make_external_link(model_version)
+
+    assert url == expected_url
+
+
+def test_make_external_link_tracking_ui_address(source, model_version):
+    tracking_ui_address = "http://localhost:5000"
+    source.config.tracking_ui_address = tracking_ui_address
+    expected_url = f"{tracking_ui_address}/#/models/{model_version.name}/versions/{model_version.version}"
+
+    url = source._make_external_link(model_version)
+
+    assert url == expected_url
